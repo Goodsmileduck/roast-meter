@@ -189,10 +189,10 @@ void loop() {
 // -- Setups --
 
 void setupEEPROM() {
-  EEPROM.init();
+  // EEPROM.init();
   // You may choose to enable more or less EEPROM -
   // Default length is 1024 bytes (if setLength is not called)
-  EEPROM.setLength(EEPROM_MAX_LENGTH);
+  EEPROM.begin(EEPROM_MAX_LENGTH*4);
   // Note: larger sizes will increase RAM usage and execution time
 
   // use EEPROM.get(int index, T type) to retrieve

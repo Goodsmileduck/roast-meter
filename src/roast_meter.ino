@@ -4,7 +4,7 @@
 
 #include "MAX30105.h"
 
-#define PIN_RESET 9
+#define PIN_RESET 17
 #define DC_JUMPER 1
 
 MAX30105 particleSensor;
