@@ -1,4 +1,4 @@
-// VERSION 1.0.0
+// VERSION 0.2
 #include <Arduino.h>
 #include <Preferences.h>
 #include <Wire.h>
@@ -7,12 +7,29 @@
 
 #include "MAX30105.h"
 
+// -- Board Configuration (override via build_flags) --
+#ifndef I2C_SDA
+#define I2C_SDA -1
+#endif
+#ifndef I2C_SCL
+#define I2C_SCL -1
+#endif
+
+// -- Display Configuration (override via build_flags) --
+#ifndef SCREEN_WIDTH
+#define SCREEN_WIDTH 128
+#endif
+#ifndef SCREEN_HEIGHT
+#define SCREEN_HEIGHT 64
+#endif
+#ifndef I2C_ADDRESS_OLED
+#define I2C_ADDRESS_OLED 0x3C
+#endif
+
 // -- Constant Values --
+#ifndef FIRMWARE_REVISION_STRING
 #define FIRMWARE_REVISION_STRING "v0.2"
-
-// #define PIN_RESET 9
-// #define DC_JUMPER 1
-
+#endif
 
 #define WARMUP_TIME 60  // seconds
 
@@ -30,10 +47,7 @@
 #define PREF_DEVIATION_KEY "deviation"
 #define PREF_DEVIATION_DEFAULT 0.165f
 
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
 #define OLED_RESET -1
-#define I2C_ADDRESS_OLED 0x3C
 
 // -- End Preferences constants
 
@@ -86,8 +100,6 @@ void displayMeasurement(int rLevel);
 
 // -- Utility Function Headers --
 
-String multiplyChar(char c, int n);
-String stringLastN(String input, int n);
 int mapIRToAgtron(uint32_t x);
 
 // -- End Utility Function Headers --
@@ -96,7 +108,11 @@ int mapIRToAgtron(uint32_t x);
 void setup() {
     Serial.begin(115200);
 
+#if I2C_SDA >= 0 && I2C_SCL >= 0
+    Wire.begin(I2C_SDA, I2C_SCL);
+#else
     Wire.begin();
+#endif
 
     // Initialize OLED
     if (!oled.begin(SSD1306_SWITCHCAPVCC, I2C_ADDRESS_OLED)) {
@@ -107,14 +123,14 @@ void setup() {
     } else {
         oledAvailable = true;
         Serial.println(F("✅ OLED initialized successfully"));
-    }
 
-    oled.clearDisplay();
-    oled.setTextSize(1);
-    oled.setTextColor(WHITE);
-    oled.setCursor(0, 0);
-    oled.println("Initializing...");
-    oled.display();
+        oled.clearDisplay();
+        oled.setTextSize(1);
+        oled.setTextColor(WHITE);
+        oled.setCursor(0, 0);
+        oled.println("Initializing...");
+        oled.display();
+    }
 
     setupPreferences();
 
@@ -122,11 +138,13 @@ void setup() {
     if (particleSensor.begin(Wire, 400000) == false)  // Use default I2C port, 400kHz speed
     {
         Serial.println("MAX30105 was not found. Please check wiring/power. ");
-        oled.clearDisplay();
-        oled.setCursor(0, 0);
-        oled.println("Sensor Error!");
-        oled.println("Check wiring");
-        oled.display();
+        if (oledAvailable) {
+            oled.clearDisplay();
+            oled.setCursor(0, 0);
+            oled.println("Sensor Error!");
+            oled.println("Check wiring");
+            oled.display();
+        }
 
         // Retry every 5 seconds
         while (particleSensor.begin(Wire, 400000) == false) {
@@ -219,6 +237,14 @@ void displayStartUp() {
     delay(2000);
 }
 
+const char* getWarmupFace(int secondsLeft) {
+    if (secondsLeft > 45) return "(-.-)zzZ";  // sleeping
+    if (secondsLeft > 30) return "(-.-)z";    // drowsy
+    if (secondsLeft > 15) return "(o.o)";     // waking
+    if (secondsLeft > 5)  return "(^.^)";     // alert
+    return "(^o^)/";                           // ready!
+}
+
 void warmUpLED() {
     int countDownSeconds = WARMUP_TIME;
     unsigned long jobTimerStart = millis();
@@ -232,17 +258,53 @@ void warmUpLED() {
 
             if (oledAvailable) {
                 oled.clearDisplay();
-                oled.setCursor(0, 2);
                 oled.setTextSize(1);
-                oled.printf("Warm Up %ds", countDownSeconds);
+
+#if SCREEN_WIDTH <= 64
+                // 64x48 display
+                oled.setCursor(0, 0);
+                oled.println(getWarmupFace(countDownSeconds));
+                oled.println();
+                oled.printf("Warm %ds", countDownSeconds);
+#else
+                // 128x64 display
+                oled.setCursor(0, 8);
+                oled.setTextSize(2);
+                oled.println(getWarmupFace(countDownSeconds));
+                oled.setTextSize(1);
+                oled.println();
+                oled.printf("  Warming up %ds", countDownSeconds);
+#endif
                 oled.display();
             } else {
-                Serial.println("Warm Up " + String(countDownSeconds) + "s");
+                Serial.printf("Warm Up %ds %s\n", countDownSeconds, getWarmupFace(countDownSeconds));
             }
 
             jobTimer = millis();
         }
     }
+
+    // Ready celebration screen
+    if (oledAvailable) {
+        oled.clearDisplay();
+#if SCREEN_WIDTH <= 64
+        oled.setTextSize(1);
+        oled.setCursor(0, 12);
+        oled.println(" (^o^)/");
+        oled.println();
+        oled.println(" Ready!");
+#else
+        oled.setTextSize(2);
+        oled.setCursor(20, 10);
+        oled.println("(^o^)/");
+        oled.setCursor(28, 35);
+        oled.println("Ready!");
+#endif
+        oled.display();
+    } else {
+        Serial.println("(^o^)/ Ready!");
+    }
+    delay(1500);
 }
 
 unsigned long measureSampleJobTimer = millis();
@@ -303,19 +365,29 @@ void displayPleaseLoadSample() {
 
     oled.clearDisplay();
     oled.setCursor(0, 0);
-    oled.setTextSize(2);
 
+#if SCREEN_WIDTH <= 64
+    // 64x48 (0.66" OLED)
+    oled.setTextSize(1);
+    oled.println("Please");
+    oled.println("load");
+    oled.println("sample!");
+#else
+    // 128x64 (0.96" OLED)
+    oled.setTextSize(2);
     oled.println("Please ");
     oled.println("load ");
     oled.println("sample! ");
+#endif
+
     oled.display();
 }
 
-void drawMyCenterString(const String &buf, int x, int y){
+void drawMyCenterString(const String &buf, int y){
     int16_t x1, y1;
     uint16_t w, h;
     oled.getTextBounds(buf, 0, 0, &x1, &y1, &w, &h);
-    oled.setCursor( (oled.width() - w)/2, y);
+    oled.setCursor((oled.width() - w) / 2, y);
     oled.print(buf);
 }
 
@@ -326,11 +398,17 @@ void displayMeasurement(int agtronLevel) {
     }
 
     oled.clearDisplay();
-    //oled.setCursor(20, 25);
-    oled.setTextSize(3);
 
     String agtronLevelText = String(agtronLevel);
-    drawMyCenterString(agtronLevelText, 0, 20);
+#if SCREEN_WIDTH <= 64
+    // 64x48 (0.66" OLED)
+    oled.setTextSize(2);
+    drawMyCenterString(agtronLevelText, 16);
+#else
+    // 128x64 (0.96" OLED)
+    oled.setTextSize(3);
+    drawMyCenterString(agtronLevelText, 20);
+#endif
 
     oled.display();
 }
@@ -339,21 +417,6 @@ void displayMeasurement(int agtronLevel) {
 // -- End Sub Routines --
 
 // -- Utility Functions --
-
-String multiplyChar(char c, int n) {
-    String result;
-    result.reserve(n);  // Pre-allocate memory to avoid fragmentation
-    for (int i = 0; i < n; i++) {
-        result += c;
-    }
-    return result;
-}
-
-String stringLastN(String input, int n) {
-    int inputSize = input.length();
-
-    return (n > 0 && inputSize > n) ? input.substring(inputSize - n) : "";
-}
 
 int mapIRToAgtron(uint32_t x) {
     // Convert to int for calculation (x is already scaled down by /1000)
