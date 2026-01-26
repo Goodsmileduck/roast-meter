@@ -25,6 +25,10 @@
 #ifndef I2C_ADDRESS_OLED
 #define I2C_ADDRESS_OLED 0x3C
 #endif
+// Y offset for displays where visible area is shifted (e.g., some 64x48 OLEDs)
+#ifndef DISPLAY_Y_OFFSET
+#define DISPLAY_Y_OFFSET 0
+#endif
 
 // -- Constant Values --
 #ifndef FIRMWARE_REVISION_STRING
@@ -227,11 +231,18 @@ void displayStartUp() {
         return;
     }
 
-    oled.setCursor(0, 0);
     oled.clearDisplay();
+#if SCREEN_HEIGHT <= 48
+    oled.setCursor(4, 12 + DISPLAY_Y_OFFSET);
+    oled.print("Roast Meter");
+    oled.setCursor(20, 22 + DISPLAY_Y_OFFSET);
+    oled.print(FIRMWARE_REVISION_STRING);
+#else
+    oled.setCursor(0, 0);
     oled.print("Roast  ");
     oled.print("Meter  ");
     oled.print(FIRMWARE_REVISION_STRING);
+#endif
     oled.display();
 
     delay(2000);
@@ -258,14 +269,14 @@ void warmUpLED() {
 
             if (oledAvailable) {
                 oled.clearDisplay();
-                oled.setTextSize(1);
 
-#if SCREEN_WIDTH <= 64
+#if SCREEN_HEIGHT <= 48
                 // 64x48 display
-                oled.setCursor(0, 0);
+                oled.setTextSize(1);
+                oled.setCursor(8, 8 + DISPLAY_Y_OFFSET);
                 oled.println(getWarmupFace(countDownSeconds));
                 oled.println();
-                oled.printf("Warm %ds", countDownSeconds);
+                oled.printf(" Warm %ds", countDownSeconds);
 #else
                 // 128x64 display
                 oled.setCursor(0, 8);
@@ -287,10 +298,10 @@ void warmUpLED() {
     // Ready celebration screen
     if (oledAvailable) {
         oled.clearDisplay();
-#if SCREEN_WIDTH <= 64
+#if SCREEN_HEIGHT <= 48
         oled.setTextSize(1);
-        oled.setCursor(0, 12);
-        oled.println(" (^o^)/");
+        oled.setCursor(12, 8 + DISPLAY_Y_OFFSET);
+        oled.println("(^o^)/");
         oled.println();
         oled.println(" Ready!");
 #else
@@ -364,16 +375,18 @@ void displayPleaseLoadSample() {
     }
 
     oled.clearDisplay();
-    oled.setCursor(0, 0);
 
-#if SCREEN_WIDTH <= 64
+#if SCREEN_HEIGHT <= 48
     // 64x48 (0.66" OLED)
+    // Text size 1 = 8px tall, 3 lines = 24px + spacing ~30px
+    // Center in 48px visible area, apply Y offset
     oled.setTextSize(1);
-    oled.println("Please");
-    oled.println("load");
+    oled.setCursor(4, 8 + DISPLAY_Y_OFFSET);
+    oled.println("Load");
     oled.println("sample!");
 #else
     // 128x64 (0.96" OLED)
+    oled.setCursor(0, 0);
     oled.setTextSize(2);
     oled.println("Please ");
     oled.println("load ");
@@ -383,11 +396,15 @@ void displayPleaseLoadSample() {
     oled.display();
 }
 
-void drawMyCenterString(const String &buf, int y){
+void drawMyCenterString(const String &buf){
     int16_t x1, y1;
     uint16_t w, h;
     oled.getTextBounds(buf, 0, 0, &x1, &y1, &w, &h);
-    oled.setCursor((oled.width() - w) / 2, y);
+    // Center horizontally and vertically
+    // y1 is negative offset from cursor to top of text
+    int x = (SCREEN_WIDTH - w) / 2 - x1;
+    int y = (SCREEN_HEIGHT - h) / 2 - y1;
+    oled.setCursor(x, y);
     oled.print(buf);
 }
 
@@ -400,14 +417,26 @@ void displayMeasurement(int agtronLevel) {
     oled.clearDisplay();
 
     String agtronLevelText = String(agtronLevel);
-#if SCREEN_WIDTH <= 64
+#if SCREEN_HEIGHT <= 48
     // 64x48 (0.66" OLED)
     oled.setTextSize(2);
-    drawMyCenterString(agtronLevelText, 16);
+    // Size 2: 12px wide per char, 16px tall
+    int charWidth = 12;
+    int textWidth = agtronLevelText.length() * charWidth;
+    int xPos = (SCREEN_WIDTH - textWidth) / 2;
+    int yPos = (SCREEN_HEIGHT - 16) / 2 + DISPLAY_Y_OFFSET;
+    oled.setCursor(xPos > 0 ? xPos : 0, yPos);
+    oled.print(agtronLevelText);
+    // Debug output
+    Serial.printf("64x48 display: x=%d y=%d (offset=%d) text='%s'\n", xPos, yPos, DISPLAY_Y_OFFSET, agtronLevelText.c_str());
+#elif SCREEN_WIDTH <= 64
+    // 64x64 - use size 2
+    oled.setTextSize(2);
+    drawMyCenterString(agtronLevelText);
 #else
     // 128x64 (0.96" OLED)
     oled.setTextSize(3);
-    drawMyCenterString(agtronLevelText, 20);
+    drawMyCenterString(agtronLevelText);
 #endif
 
     oled.display();
