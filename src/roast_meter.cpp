@@ -6,6 +6,15 @@
 #include <Adafruit_SSD1306.h>
 
 #include "MAX30105.h"
+#include <LittleFS.h>
+
+// -- Debug Logging Configuration --
+#ifndef DEBUG_LOGGING_ENABLED
+#define DEBUG_LOGGING_ENABLED 1
+#endif
+#ifndef DEBUG_SERIAL_COMMANDS
+#define DEBUG_SERIAL_COMMANDS 1
+#endif
 
 // -- Board Configuration (override via build_flags) --
 #ifndef I2C_SDA
@@ -54,6 +63,39 @@
 #define OLED_RESET -1
 
 // -- End Preferences constants
+
+// -- Debug Log constants --
+#if DEBUG_LOGGING_ENABLED
+#define LOG_FILE_PATH "/log.bin"
+#define LOG_MAGIC 0x524F5354  // "ROST"
+#define LOG_VERSION 1
+#define LOG_MAX_ENTRIES 65000
+#define LOG_BUFFER_SIZE 10
+#define LOG_FLUSH_IDLE_MS 2000
+
+// Log header structure (32 bytes)
+struct __attribute__((packed)) LogHeader {
+    uint32_t magic;           // 0x524F5354 "ROST"
+    uint16_t version;         // Log format version
+    uint16_t reserved1;       // Padding
+    uint32_t writePosition;   // Next write index (0 to LOG_MAX_ENTRIES-1)
+    uint32_t entryCount;      // Total entries written (can exceed MAX if wrapped)
+    uint8_t  wrapped;         // 1 if buffer has wrapped
+    uint8_t  reserved2[15];   // Padding to 32 bytes
+};
+
+// Log entry structure (16 bytes)
+struct __attribute__((packed)) LogEntry {
+    uint32_t timestamp;       // millis() value
+    uint32_t rawIR;           // Raw IR sensor value
+    int16_t  agtron;          // Calculated Agtron level
+    uint8_t  ledBrightness;   // LED brightness setting
+    uint8_t  intersectPt;     // Intersection point setting
+    uint16_t deviationX1000;  // Deviation * 1000
+    uint16_t flags;           // Reserved for future use
+};
+#endif
+// -- End Debug Log constants --
 
 // -- Global Variables --
 
