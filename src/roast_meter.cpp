@@ -111,6 +111,16 @@ Preferences preferences;
 // OLED status tracking
 bool oledAvailable = false;
 
+#if DEBUG_LOGGING_ENABLED
+// Debug logging state
+LogHeader logHeader;
+LogEntry logBuffer[LOG_BUFFER_SIZE];
+uint8_t logBufferCount = 0;
+unsigned long lastLogFlush = 0;
+unsigned long lastMeasurementTime = 0;
+bool logFileOpen = false;
+#endif
+
 // -- End Global Variables --
 
 // -- Global Setting --
@@ -141,6 +151,19 @@ void warmUpLED();
 void measureSampleJob();
 void displayPleaseLoadSample();
 void displayMeasurement(int rLevel);
+
+#if DEBUG_LOGGING_ENABLED
+void setupDebugLog();
+void logMeasurement(uint32_t timestamp, uint32_t rawIR, int16_t agtron);
+void flushLogBuffer();
+#endif
+
+#if DEBUG_SERIAL_COMMANDS
+void handleSerialCommands();
+void dumpLogToSerial();
+void clearLog();
+void printLogStatus();
+#endif
 
 // -- End Sub Routine Headers --
 
