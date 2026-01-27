@@ -203,6 +203,10 @@ void setup() {
 
     setupPreferences();
 
+#if DEBUG_LOGGING_ENABLED
+    setupDebugLog();
+#endif
+
     // Initialize sensor
     if (particleSensor.begin(Wire, 400000) == false)  // Use default I2C port, 400kHz speed
     {
@@ -522,3 +526,62 @@ int mapIRToAgtron(uint32_t x) {
 } 
 
 // -- End Utility Functions --
+
+// -- Debug Logging Functions --
+
+#if DEBUG_LOGGING_ENABLED
+void setupDebugLog() {
+    Serial.println(F("Initializing debug log..."));
+
+    if (!LittleFS.begin(true)) {  // true = format if mount fails
+        Serial.println(F("ERROR: LittleFS mount failed"));
+        return;
+    }
+    Serial.println(F("LittleFS mounted"));
+
+    File file = LittleFS.open(LOG_FILE_PATH, "r+");
+    if (!file) {
+        // File doesn't exist, create it
+        Serial.println(F("Creating new log file..."));
+        file = LittleFS.open(LOG_FILE_PATH, "w+");
+        if (!file) {
+            Serial.println(F("ERROR: Cannot create log file"));
+            return;
+        }
+
+        // Initialize header
+        memset(&logHeader, 0, sizeof(LogHeader));
+        logHeader.magic = LOG_MAGIC;
+        logHeader.version = LOG_VERSION;
+        logHeader.writePosition = 0;
+        logHeader.entryCount = 0;
+        logHeader.wrapped = 0;
+
+        file.write((uint8_t*)&logHeader, sizeof(LogHeader));
+        file.close();
+
+        Serial.println(F("Log file created"));
+    } else {
+        // Read existing header
+        file.read((uint8_t*)&logHeader, sizeof(LogHeader));
+        file.close();
+
+        // Validate header
+        if (logHeader.magic != LOG_MAGIC || logHeader.version != LOG_VERSION) {
+            Serial.println(F("WARNING: Log corrupted, reinitializing..."));
+            LittleFS.remove(LOG_FILE_PATH);
+            setupDebugLog();  // Recursive call to create fresh
+            return;
+        }
+
+        Serial.printf("Log loaded: %lu entries, wrapped=%d\n",
+                      logHeader.entryCount, logHeader.wrapped);
+    }
+
+    logFileOpen = true;
+    logBufferCount = 0;
+    lastLogFlush = millis();
+}
+#endif
+
+// -- End Debug Logging Functions --
