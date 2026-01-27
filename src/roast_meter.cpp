@@ -687,7 +687,32 @@ void dumpLogToSerial() {
 }
 
 void clearLog() {
-    Serial.println(F("LOG CLEAR: Not yet implemented"));
+#if DEBUG_LOGGING_ENABLED
+    if (!logFileOpen) {
+        Serial.println(F("LOG CLEAR: Logging not initialized"));
+        return;
+    }
+
+    // Reset header
+    logHeader.writePosition = 0;
+    logHeader.entryCount = 0;
+    logHeader.wrapped = 0;
+
+    // Write header to file
+    File file = LittleFS.open(LOG_FILE_PATH, "r+");
+    if (file) {
+        file.seek(0);
+        file.write((uint8_t*)&logHeader, sizeof(LogHeader));
+        file.close();
+    }
+
+    // Clear buffer
+    logBufferCount = 0;
+
+    Serial.println(F("LOG CLEAR: Log cleared successfully"));
+#else
+    Serial.println(F("LOG CLEAR: Logging disabled at compile time"));
+#endif
 }
 
 void printLogStatus() {
