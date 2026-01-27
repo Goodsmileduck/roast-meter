@@ -681,9 +681,60 @@ void handleSerialCommands() {
     }
 }
 
-// Stub implementations - will be replaced in tasks 7-9
 void dumpLogToSerial() {
-    Serial.println(F("LOG DUMP: Not yet implemented"));
+#if DEBUG_LOGGING_ENABLED
+    if (!logFileOpen) {
+        Serial.println(F("LOG DUMP: Logging not initialized"));
+        return;
+    }
+
+    // Flush any pending entries first
+    flushLogBuffer();
+
+    File file = LittleFS.open(LOG_FILE_PATH, "r");
+    if (!file) {
+        Serial.println(F("LOG DUMP: Cannot open log file"));
+        return;
+    }
+
+    // Re-read header (in case it changed)
+    file.read((uint8_t*)&logHeader, sizeof(LogHeader));
+
+    uint32_t entriesToRead = logHeader.wrapped ? LOG_MAX_ENTRIES : logHeader.writePosition;
+    uint32_t startPos = logHeader.wrapped ? logHeader.writePosition : 0;
+
+    Serial.println(F("=== ROAST METER LOG DUMP ==="));
+    Serial.printf("ENTRIES: %lu\n", entriesToRead);
+    Serial.printf("WRAPPED: %s\n", logHeader.wrapped ? "YES" : "NO");
+    Serial.println(F("--- BEGIN CSV ---"));
+    Serial.println(F("timestamp_ms,raw_ir,agtron,led_brightness,intersection_point,deviation"));
+
+    LogEntry entry;
+    for (uint32_t i = 0; i < entriesToRead; i++) {
+        uint32_t idx = (startPos + i) % LOG_MAX_ENTRIES;
+        uint32_t pos = sizeof(LogHeader) + (idx * sizeof(LogEntry));
+        file.seek(pos);
+        file.read((uint8_t*)&entry, sizeof(LogEntry));
+
+        Serial.printf("%lu,%lu,%d,%d,%d,%.3f\n",
+                      entry.timestamp,
+                      entry.rawIR,
+                      entry.agtron,
+                      entry.ledBrightness,
+                      entry.intersectPt,
+                      entry.deviationX1000 / 1000.0f);
+
+        // Yield to prevent watchdog timeout on large dumps
+        if (i % 100 == 0) {
+            yield();
+        }
+    }
+
+    Serial.println(F("--- END CSV ---"));
+    file.close();
+#else
+    Serial.println(F("LOG DUMP: Logging disabled at compile time"));
+#endif
 }
 
 void clearLog() {
