@@ -389,6 +389,13 @@ void warmUpLED() {
 
 unsigned long measureSampleJobTimer = millis();
 void measureSampleJob() {
+#if DEBUG_LOGGING_ENABLED
+    // Flush log buffer if idle
+    if (logBufferCount > 0 && (millis() - lastMeasurementTime > LOG_FLUSH_IDLE_MS)) {
+        flushLogBuffer();
+    }
+#endif
+
     if (millis() - measureSampleJobTimer > 100) {
         uint32_t rLevel = particleSensor.getIR();
 
@@ -425,6 +432,9 @@ void measureSampleJob() {
             }
 
             displayMeasurement(calibratedAgtronLevel);
+#if DEBUG_LOGGING_ENABLED
+            logMeasurement(millis(), rLevel, calibratedAgtronLevel);
+#endif
 
             Serial.println("real:" + String(rLevel));
             Serial.println("agtron:" + String(calibratedAgtronLevel));
@@ -579,6 +589,69 @@ void setupDebugLog() {
     }
 
     logFileOpen = true;
+    logBufferCount = 0;
+    lastLogFlush = millis();
+}
+
+void logMeasurement(uint32_t timestamp, uint32_t rawIR, int16_t agtron) {
+    if (!logFileOpen) return;
+
+    // Flush first if buffer is full (ensures space for new entry)
+    if (logBufferCount >= LOG_BUFFER_SIZE) {
+        flushLogBuffer();
+    }
+
+    // Only add if there's space (handles case where flush failed)
+    if (logBufferCount >= LOG_BUFFER_SIZE) {
+        Serial.println(F("WARNING: Log buffer full, dropping entry"));
+        return;
+    }
+
+    // Create entry
+    LogEntry entry;
+    entry.timestamp = timestamp;
+    entry.rawIR = rawIR;
+    entry.agtron = agtron;
+    entry.ledBrightness = ledBrightness;
+    entry.intersectPt = (uint8_t)intersectionPoint;
+    entry.deviationX1000 = (uint16_t)(deviation * 1000);
+    entry.flags = 0;
+
+    // Add to buffer
+    logBuffer[logBufferCount++] = entry;
+    lastMeasurementTime = millis();
+}
+
+void flushLogBuffer() {
+    if (!logFileOpen || logBufferCount == 0) return;
+
+    File file = LittleFS.open(LOG_FILE_PATH, "r+");
+    if (!file) {
+        Serial.println(F("ERROR: Cannot open log for write"));
+        return;
+    }
+
+    // Write each buffered entry
+    for (uint8_t i = 0; i < logBufferCount; i++) {
+        // Calculate file position: header + (writePosition * entrySize)
+        uint32_t pos = sizeof(LogHeader) + (logHeader.writePosition * sizeof(LogEntry));
+        file.seek(pos);
+        file.write((uint8_t*)&logBuffer[i], sizeof(LogEntry));
+
+        // Update write position (circular)
+        logHeader.writePosition++;
+        if (logHeader.writePosition >= LOG_MAX_ENTRIES) {
+            logHeader.writePosition = 0;
+            logHeader.wrapped = 1;
+        }
+        logHeader.entryCount++;
+    }
+
+    // Update header
+    file.seek(0);
+    file.write((uint8_t*)&logHeader, sizeof(LogHeader));
+    file.close();
+
     logBufferCount = 0;
     lastLogFlush = millis();
 }
