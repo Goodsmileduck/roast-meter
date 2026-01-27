@@ -234,6 +234,9 @@ void setup() {
 }
 
 void loop() {
+#if DEBUG_SERIAL_COMMANDS
+    handleSerialCommands();
+#endif
     measureSampleJob();
 }
 
@@ -658,3 +661,38 @@ void flushLogBuffer() {
 #endif
 
 // -- End Debug Logging Functions --
+
+// -- Debug Serial Commands --
+
+#if DEBUG_SERIAL_COMMANDS
+void handleSerialCommands() {
+    if (!Serial.available()) return;
+
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+    cmd.toUpperCase();
+
+    if (cmd == "LOG DUMP") {
+        dumpLogToSerial();
+    } else if (cmd == "LOG CLEAR") {
+        clearLog();
+    } else if (cmd == "LOG STATUS") {
+        printLogStatus();
+    }
+}
+
+// Stub implementations - will be replaced in tasks 7-9
+void dumpLogToSerial() {
+    Serial.println(F("LOG DUMP: Not yet implemented"));
+}
+
+void clearLog() {
+    Serial.println(F("LOG CLEAR: Not yet implemented"));
+}
+
+void printLogStatus() {
+    Serial.println(F("LOG STATUS: Not yet implemented"));
+}
+#endif
+
+// -- End Debug Serial Commands --
