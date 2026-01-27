@@ -691,7 +691,24 @@ void clearLog() {
 }
 
 void printLogStatus() {
-    Serial.println(F("LOG STATUS: Not yet implemented"));
+#if DEBUG_LOGGING_ENABLED
+    if (!logFileOpen) {
+        Serial.println(F("LOG STATUS: Logging not initialized"));
+        return;
+    }
+
+    Serial.println(F("=== ROAST METER LOG STATUS ==="));
+    Serial.printf("Entries logged: %lu\n", logHeader.entryCount);
+    Serial.printf("Current position: %lu / %d\n", logHeader.writePosition, LOG_MAX_ENTRIES);
+    Serial.printf("Wrapped: %s\n", logHeader.wrapped ? "YES" : "NO");
+    Serial.printf("Buffer pending: %d\n", logBufferCount);
+
+    uint32_t usedEntries = logHeader.wrapped ? LOG_MAX_ENTRIES : logHeader.writePosition;
+    float capacityPct = (usedEntries * 100.0f) / LOG_MAX_ENTRIES;
+    Serial.printf("Capacity used: %.1f%%\n", capacityPct);
+#else
+    Serial.println(F("LOG STATUS: Logging disabled at compile time"));
+#endif
 }
 #endif
 
