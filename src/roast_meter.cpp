@@ -1,4 +1,4 @@
-// VERSION 0.2
+// VERSION 0.3-beta
 #include <Arduino.h>
 #include <Preferences.h>
 #include <Wire.h>
